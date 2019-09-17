@@ -5,12 +5,12 @@
     
     
       
-      <testcase classname="fastlane.lanes" name="0: default_platform" time="0.005775">
+      <testcase classname="fastlane.lanes" name="0: default_platform" time="0.0052">
         
       </testcase>
     
       
-      <testcase classname="fastlane.lanes" name="1: gradle" time="4.004934">
+      <testcase classname="fastlane.lanes" name="1: ensure_git_branch" time="0.019219">
         
       </testcase>
     
