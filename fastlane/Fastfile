@@ -107,7 +107,7 @@ platform :android do
       task: "assemble", # Generates a standard APK
       # task: "bundle", # USE THIS FOR APP BUNDLE, BUT THIS WON'T WORK WITH CRASHLYTICS FABRIC DEPLOY
 
-      flavor: "Pro",
+      # flavor: "Pro",
       build_type: "Release",
       properties: {
         "ciVersionCode" => version_code,
