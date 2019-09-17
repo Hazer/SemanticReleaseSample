@@ -1,0 +1,151 @@
+# This file contains the fastlane.tools configuration
+# You can find the documentation at https://docs.fastlane.tools
+#
+# For a list of all available actions, check out
+#
+#     https://docs.fastlane.tools/actions
+#
+# For a list of all available plugins, check out
+#
+#     https://docs.fastlane.tools/plugins/available-plugins
+#
+
+# Uncomment the line if you want fastlane to automatically update itself
+# update_fastlane
+
+default_platform(:android)
+
+platform :android do
+  desc "Runs all the tests"
+  lane :test do
+    gradle(task: "test")
+  end
+
+  desc "Creates a new version and starts publishing flow"
+  lane :publishDev do
+    ensure_git_status_clean
+
+    ensure_git_branch(
+      branch: 'develop'
+    )
+
+    is_releasable = analyze_commits(match: 'dev/*')
+
+    unless is_releasable
+      UI.message('Nothing to release')
+      next
+    end
+
+    next_version = lane_context[SharedValues::RELEASE_NEXT_VERSION]
+    # generates release notes for this version
+    notes = conventional_changelog(
+      format: "markdown"
+    )
+
+    slack_notes = conventional_changelog(
+      format: "slack",
+      sections: {
+          feat: "Novas Features",
+          fix: "Bug fixes",
+          refactor: "Code refactoring",
+          perf: "Performance improving",
+          chore: "Building system",
+          test: "Testing",
+          docs: "Documentation",
+          no_type: "Extras"
+      }
+    )
+
+    tag = "dev/#{next_version}"
+
+    add_git_tag(tag: tag, message: notes)
+    push_git_tags(tag: tag)
+
+    slack(
+      message: slack_notes,
+      fail_on_error: false,
+      attachment_properties: {
+        fields: [{
+          title: "Version Name",
+          value: tag,
+          short: true
+        }]
+      }
+    )
+  end 
+
+  desc "Submit a Dev Version to Crashlytics"
+  lane :deployDev do |options|
+    ensure_git_status_clean
+
+    ensure_git_branch(
+      branch: 'develop'
+    )
+
+    unless is_ci?
+      UI.error("Must not run locally, sorry.")
+      next
+    end
+
+    version_name = ENV["BITRISE_GIT_TAG"]
+    version_code = ENV["BITRISE_BUILD_NUMBER"]
+
+    unless git_tag_exists(tag: version_name)
+      UI.error("Version Name #{version_name} does not exists in Git.")
+      next
+    end
+
+    unless version_code
+      UI.error('Build Number must be provided')
+      next
+    end
+
+    changelog = sh("git tag -l --format='%(contents)' #{version_name}", log: false)
+
+    # gradle(task: "clean assembleRelease")
+    gradle(
+      task: "assemble", # Generates a standard APK
+      # task: "bundle", # USE THIS FOR APP BUNDLE, BUT THIS WON'T WORK WITH CRASHLYTICS FABRIC DEPLOY
+
+      flavor: "Pro",
+      build_type: "Release",
+      properties: {
+        "ciVersionCode" => version_code,
+        "ciVersionName" => version_name,
+      }
+    )
+
+    crashlytics(
+      notes: changelog
+    )
+
+    # Play Store supports Android App Bundle.
+    # upload_to_play_store # https://docs.fastlane.tools/actions/upload_to_play_store/
+  
+    slack(
+      message: "Deployed to Fabric #{version_name}",
+      fail_on_error: false,
+      attachment_properties: {
+        fields: [{
+          title: "Version Name",
+          value: version_name,
+          short: true
+        }, {
+          title: "Version Code",
+          value: version_code,
+          short: true
+        }, {
+          title: "Build Url",
+          value: ENV["BITRISE_BUILD_URL"],
+          short: true
+        }]
+      }
+    )
+  end
+
+  desc "Deploy a new version to the Google Play"
+  lane :deploy do
+    gradle(task: "clean bundleRelease")
+    upload_to_play_store # https://docs.fastlane.tools/actions/upload_to_play_store/
+  end
+end
